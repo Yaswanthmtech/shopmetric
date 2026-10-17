@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: lint + unit + Spark + Postgres e2e
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: shopmetric
+          POSTGRES_PASSWORD: shopmetric
+          POSTGRES_DB: shopmetric
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shopmetric"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install
+        run: pip install -r requirements/dev.txt && pip install -e .
+      - name: Lint
+        run: ruff check src tests dashboard
+      - name: Data contract is up to date
+        run: python -m shopmetric.contract && git diff --exit-code contracts/
+      - name: Tests
+        env:
+          TEST_PG_HOST: localhost
+          TEST_PG_PORT: "5432"
+        run: pytest -q
+
+  config:
+    name: compose + shell checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compose renders in full and laptop mode
+        run: |
+          cp .env.example .env && docker compose --profile train config -q
+          cp .env.laptop .env && docker compose --profile train config -q
+      - run: shellcheck shopmetric.sh scripts/*.sh
+
+  smoke:
+    name: Docker end-to-end smoke test
+    needs: [tests, config]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run the full stack, inject fraud, assert results
+        run: ./scripts/ci_smoke.sh

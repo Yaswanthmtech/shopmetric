@@ -1,0 +1,32 @@
+# secrets & local config (.env holds your API key; .env.bak is the copy 'mode' makes)
+.env
+.env.bak
+.env.tmp
+secrets/*
+!secrets/.gitkeep
+
+# trained models (reproducible: ./shopmetric.sh train)
+models/fraud/*
+!models/fraud/.gitkeep
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# spark local artefacts
+spark-warehouse/
+metastore_db/
+derby.log
+checkpoints/
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/
+.env.laptop

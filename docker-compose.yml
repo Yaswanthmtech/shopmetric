@@ -1,0 +1,173 @@
+# ShopMetric local stack. Normally driven by ./shopmetric.sh (up | down | status | ...).
+#
+# Optional services are switched on by COMPOSE_PROFILES in .env:
+#   local    -> Postgres (stand-in for Snowflake)
+#   s3local  -> SeaweedFS (stand-in for AWS S3); without it the lake is a local folder (/lake)
+#   ui       -> Kafka UI
+#   full mode   (.env.example): local,s3local,ui
+#   laptop mode (.env.laptop):  local            <- fits an 8 GB laptop
+#   cloud mode:                 (empty) + real AWS S3 and Snowflake settings in .env
+#
+# Kafka, Spark, producer and dashboard always run in Docker.
+name: shopmetric
+
+x-app: &app
+  image: shopmetric-app:latest
+  build: { context: ., dockerfile: docker/app.Dockerfile }
+  env_file: .env
+  volumes:
+    - ./models:/models:ro
+    - ./secrets:/secrets:ro
+
+x-spark: &spark
+  image: shopmetric-spark:latest
+  build: { context: ., dockerfile: docker/spark.Dockerfile }
+  env_file: .env
+  init: true
+
+services:
+  # ------------------------------------------------------------------ messaging
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: kafka
+    ports: ["9094:9094"]
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller           # KRaft: no ZooKeeper
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "${KAFKA_HEAP_OPTS:--Xms256m -Xmx1g}"
+    volumes: [kafka-data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    depends_on: { kafka: { condition: service_healthy } }
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        T=/opt/kafka/bin/kafka-topics.sh
+        $$T --bootstrap-server kafka:9092 --create --if-not-exists --topic ${TOPIC_ORDERS:-orders.raw} \
+            --partitions 3 --replication-factor 1 --config retention.ms=172800000 --config compression.type=producer
+        $$T --bootstrap-server kafka:9092 --create --if-not-exists --topic ${TOPIC_ALERTS:-orders.fraud_alerts} \
+            --partitions 1 --replication-factor 1
+        $$T --bootstrap-server kafka:9092 --describe --topic ${TOPIC_ORDERS:-orders.raw}
+    restart: "no"
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.5.0
+    profiles: ["ui"]
+    ports: ["8080:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: shopmetric
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on: { kafka: { condition: service_healthy } }
+
+  # ------------------------------------------------- local stand-ins for AWS
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    profiles: ["s3local"]
+    ports: ["8333:8333"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-shopmetric}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-shopmetric-secret}
+      S3_BUCKET: shopmetric-lake
+    volumes: [seaweed-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8333/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["local"]
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_USER: ${PG_USER:-shopmetric}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-shopmetric}
+      POSTGRES_DB: ${PG_DB:-shopmetric}
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-shopmetric} -d ${PG_DB:-shopmetric}"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # ------------------------------------------------------------ bootstrap
+  init:
+    <<: *app
+    command: ["python", "-m", "shopmetric.init_infra"]
+    depends_on:
+      postgres: { condition: service_healthy, required: false }
+      seaweedfs: { condition: service_healthy, required: false }
+    restart: "no"
+
+  trainer:
+    <<: *spark
+    profiles: ["train"]          # run on demand: ./shopmetric.sh train
+    command: ["python", "-m", "shopmetric.train_model"]
+    environment:
+      # training briefly needs more memory than streaming; laptop mode sets TRAIN_DRIVER_MEMORY=1g
+      SPARK_DRIVER_MEMORY: ${TRAIN_DRIVER_MEMORY:-2g}
+      SPARK_DRIVER_JAVA_OPTS: ""
+    volumes: ["./models:/models"]
+
+  # ------------------------------------------------------------ pipeline
+  spark-stream:
+    <<: *spark
+    ports: ["4040:4040"]         # Spark UI
+    volumes:
+      - ./models:/models:ro
+      - ./secrets:/secrets:ro
+      - checkpoints:/checkpoints
+      - lake:/lake               # used when LAKE_URI=file:///lake (laptop mode)
+    depends_on:
+      kafka-init: { condition: service_completed_successfully }
+      init: { condition: service_completed_successfully }
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  producer:
+    <<: *app
+    command: ["python", "-m", "shopmetric.producer", "--rate", "${PRODUCER_RATE:-5}"]
+    depends_on:
+      kafka-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  dashboard:
+    <<: *app
+    command: ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports: ["8501:8501"]
+    depends_on:
+      init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  kafka-data:
+  seaweed-data:
+  pg-data:
+  checkpoints:
+  lake:

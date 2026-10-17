@@ -1,0 +1,182 @@
+{
+  "additionalProperties": false,
+  "description": "One checkout event, as published by the order service.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "customer_id": {
+      "title": "Customer Id",
+      "type": "string"
+    },
+    "event_ts": {
+      "format": "date-time",
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "produced_at_ms": {
+      "title": "Produced At Ms",
+      "type": "integer"
+    },
+    "channel": {
+      "enum": [
+        "web",
+        "mobile_app",
+        "marketplace"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "device_type": {
+      "enum": [
+        "desktop",
+        "ios",
+        "android",
+        "tablet"
+      ],
+      "title": "Device Type",
+      "type": "string"
+    },
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "device_age_days": {
+      "minimum": 0,
+      "title": "Device Age Days",
+      "type": "integer"
+    },
+    "account_age_days": {
+      "minimum": 0,
+      "title": "Account Age Days",
+      "type": "integer"
+    },
+    "billing_country": {
+      "maxLength": 2,
+      "minLength": 2,
+      "title": "Billing Country",
+      "type": "string"
+    },
+    "ip_country": {
+      "maxLength": 2,
+      "minLength": 2,
+      "title": "Ip Country",
+      "type": "string"
+    },
+    "shipping_country": {
+      "maxLength": 2,
+      "minLength": 2,
+      "title": "Shipping Country",
+      "type": "string"
+    },
+    "payment_method": {
+      "enum": [
+        "credit_card",
+        "debit_card",
+        "paypal",
+        "apple_pay",
+        "bnpl",
+        "gift_card",
+        "crypto"
+      ],
+      "title": "Payment Method",
+      "type": "string"
+    },
+    "category": {
+      "enum": [
+        "electronics",
+        "fashion",
+        "home",
+        "beauty",
+        "grocery",
+        "sports",
+        "toys",
+        "books",
+        "gift_cards"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "item_count": {
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Item Count",
+      "type": "integer"
+    },
+    "amount": {
+      "exclusiveMinimum": 0,
+      "title": "Amount",
+      "type": "number"
+    },
+    "currency": {
+      "enum": [
+        "USD",
+        "EUR",
+        "GBP",
+        "INR",
+        "CAD"
+      ],
+      "title": "Currency",
+      "type": "string"
+    },
+    "discount_pct": {
+      "maximum": 0.9,
+      "minimum": 0,
+      "title": "Discount Pct",
+      "type": "number"
+    },
+    "simulated_label": {
+      "anyOf": [
+        {
+          "enum": [
+            "legit",
+            "card_testing",
+            "account_takeover",
+            "synthetic_identity"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Simulated Label"
+    }
+  },
+  "required": [
+    "event_id",
+    "order_id",
+    "customer_id",
+    "event_ts",
+    "produced_at_ms",
+    "channel",
+    "device_type",
+    "device_id",
+    "device_age_days",
+    "account_age_days",
+    "billing_country",
+    "ip_country",
+    "shipping_country",
+    "payment_method",
+    "category",
+    "item_count",
+    "amount",
+    "currency",
+    "discount_pct"
+  ],
+  "title": "OrderEvent",
+  "type": "object",
+  "$id": "shopmetric/orders.raw/v1.0"
+}

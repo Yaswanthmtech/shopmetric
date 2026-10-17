@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shopmetric"
+version = "1.0.0"
+description = "Real-time AI-driven sales command center: Kafka -> Spark Structured Streaming (stateful features + MLlib fraud scoring) -> S3 lake + Snowflake/Postgres -> Streamlit"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["spark: starts a local Spark session (needs Java 17+)"]
+filterwarnings = ["ignore::DeprecationWarning"]

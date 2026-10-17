@@ -1,0 +1,25 @@
+{
+  "Rules": [
+    {
+      "ID": "bronze-to-cheaper-storage",
+      "Filter": { "Prefix": "bronze/" },
+      "Status": "Enabled",
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 90, "StorageClass": "GLACIER_IR" }
+      ]
+    },
+    {
+      "ID": "expire-quarantine",
+      "Filter": { "Prefix": "quarantine/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 180 }
+    },
+    {
+      "ID": "abort-stale-multipart-uploads",
+      "Filter": { "Prefix": "" },
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 3 }
+    }
+  ]
+}

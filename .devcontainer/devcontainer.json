@@ -1,0 +1,15 @@
+{
+  "name": "ShopMetric (full mode)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  // Full mode needs ~5 GB for containers: ask Codespaces for a 4-core / 16 GB machine.
+  "hostRequirements": { "cpus": 4, "memory": "16gb", "storage": "32gb" },
+  "forwardPorts": [8501, 4040, 8080],
+  "portsAttributes": {
+    "8501": { "label": "Dashboard", "onAutoForward": "openBrowser" },
+    "4040": { "label": "Spark UI" },
+    "8080": { "label": "Kafka UI" }
+  }
+}

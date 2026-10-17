@@ -1,0 +1,13 @@
+# App image: producer, bootstrap job, dashboard, report
+confluent-kafka==2.16.0
+pandas==2.3.3
+pyarrow==25.0.1
+numpy==2.5.3
+pydantic==2.13.5
+psycopg[binary]==3.3.6
+snowflake-connector-python[pandas]==4.8.0
+boto3==1.43.109
+streamlit==1.65.0
+altair==6.3.0
+sqlglot==30.21.0
+anthropic==1.12.1
